@@ -1,0 +1,315 @@
+<title>Планировщик G·M·P</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600;700&family=Unbounded:wght@600&display=swap">
+<style>
+/* Layout: слева схема рантайма (очереди, P, M, зоны), справа пошаговое объяснение и код; на телефоне всё в одну колонку */
+:root {
+  --bg: #f2f5f6; --panel: #ffffff; --panel-2: #e8eef0; --ink: #132029; --muted: #5a6a73; --line: #d3dde1;
+  --accent: #0a7889; --on-accent: #ffffff; --wait: #a86a08; --sys: #b23d2c; --dead: #93a1a7; --hl: #f0b429;
+  --f-display: "Unbounded", "IBM Plex Sans", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1418; --panel: #141f25; --panel-2: #1c2a31; --ink: #e2ebee; --muted: #8b9ea7; --line: #27363d;
+  --accent: #36bfd0; --on-accent: #04252b; --wait: #e2a541; --sys: #ea6d58; --dead: #56666d; --hl: #f5c451; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0d1418; --panel: #141f25; --panel-2: #1c2a31; --ink: #e2ebee; --muted: #8b9ea7; --line: #27363d;
+  --accent: #36bfd0; --on-accent: #04252b; --wait: #e2a541; --sys: #ea6d58; --dead: #56666d; --hl: #f5c451; color-scheme: dark }
+
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 40px; }
+.wrap { max-width: 1200px; margin: 0 auto; display: grid; gap: 20px; }
+header h1 { font: 600 clamp(20px, 3vw, 28px)/1.2 var(--f-display); margin: 0 0 6px; text-wrap: balance; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--muted); max-width: 70ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 920px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+.board { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.lbl { font: 600 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.lane { display: grid; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 38px; align-items: center; }
+.empty { font: 12px var(--f-mono); color: var(--dead); }
+
+.glob { background: var(--panel-2); border-radius: 8px; padding: 10px 12px; }
+.ps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 460px) { .ps { grid-template-columns: minmax(0, 1fr); } }
+.pcol { display: grid; gap: 0; }
+.p { border: 2px solid var(--accent); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; }
+.p.idle { border-style: dashed; border-color: var(--line); }
+.p h3 { margin: 0; font: 700 16px var(--f-mono); display: flex; justify-content: space-between; align-items: baseline; }
+.p h3 small { font: 500 11px var(--f-mono); color: var(--muted); }
+.row { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; align-items: center; }
+.k { font: 11px var(--f-mono); color: var(--muted); }
+.link { width: 2px; height: 18px; background: var(--accent); margin-left: 28px; }
+.link.none { background: none; border-left: 2px dashed var(--line); }
+.mrow { display: flex; gap: 8px; align-items: center; min-height: 46px; padding: 6px 8px; border-radius: 8px; background: var(--panel-2); flex-wrap: wrap; }
+.mrow .k { margin-right: 2px; }
+.spin { font: 12px var(--f-mono); color: var(--muted); }
+
+.zones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 460px) { .zones { grid-template-columns: minmax(0, 1fr); } }
+.zone { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; align-content: start; }
+.pair { display: inline-flex; gap: 4px; align-items: center; padding: 3px; border-radius: 8px; border: 1px dashed var(--sys); }
+.why { font: 11px var(--f-mono); color: var(--wait); }
+.wpair { display: inline-flex; gap: 6px; align-items: center; }
+
+.g, .m { font-family: var(--f-mono); border-radius: 6px; display: inline-flex; align-items: baseline; gap: 5px; padding: 5px 8px; line-height: 1.1; white-space: nowrap; }
+.g b { font-weight: 700; font-size: 14px; }
+.g small { font-size: 10.5px; opacity: .8; }
+.g.ready { background: var(--panel); border: 1.5px solid var(--ink); color: var(--ink); }
+.g.run { background: var(--accent); color: var(--on-accent); border: 1.5px solid var(--accent); }
+.g.wait { border: 1.5px solid var(--wait); color: var(--wait); background: var(--panel); }
+.g.sys { border: 1.5px solid var(--sys); color: var(--sys); background: var(--panel); }
+.g.dead { border: 1.5px dashed var(--dead); color: var(--dead); }
+.m { background: var(--ink); color: var(--bg); font-weight: 700; font-size: 13px; padding: 7px 9px; }
+.hl { box-shadow: 0 0 0 3px var(--hl); }
+
+.side { display: grid; gap: 14px; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button { font: 600 14px var(--f-body); border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 8px 14px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .4; cursor: default; }
+button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+button:focus-visible, .dot:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
+.count { font: 13px var(--f-mono); color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+.dots { display: flex; gap: 5px; flex-wrap: wrap; }
+.dot { width: 22px; height: 6px; border-radius: 3px; background: var(--line); border: 0; padding: 0; cursor: pointer; }
+.dot.on { background: var(--accent); }
+
+.text { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+.text h2 { margin: 0 0 8px; font: 600 19px/1.3 var(--f-body); text-wrap: balance; }
+.text h2 span { font: 600 12px var(--f-mono); color: var(--accent); display: block; margin-bottom: 4px; letter-spacing: .06em; }
+.text p { margin: 0 0 10px; max-width: 65ch; }
+.text code, .gloss code { font: 13px var(--f-mono); background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+.fns { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; }
+
+.code { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+.code pre { margin: 0; padding: 12px 0; font: 12.5px/1.6 var(--f-mono); }
+.code pre span { display: block; padding: 0 14px; white-space: pre; color: var(--muted); }
+.code pre span.on { background: color-mix(in srgb, var(--hl) 22%, transparent); color: var(--ink); box-shadow: inset 3px 0 0 var(--hl); }
+
+.gloss { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+.gloss h2 { margin: 0 0 8px; font: 600 15px var(--f-body); }
+.gloss dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; font-size: 14px; }
+.gloss dt { font: 700 13px var(--f-mono); }
+.gloss dd { margin: 0; color: var(--muted); }
+.note { font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Планировщик Go: G, M и P по шагам</h1>
+    <p>Маленькая программа из 5 горутин на <code>GOMAXPROCS = 2</code>. Нажимайте «Дальше» и смотрите, куда перемещаются G и M на каждом событии.</p>
+  </header>
+
+  <div class="legend">
+    <span><span class="g run"><b>G</b></span> исполняется</span>
+    <span><span class="g ready"><b>G</b></span> готова, ждёт в очереди</span>
+    <span><span class="g wait"><b>G</b></span> ждёт события</span>
+    <span><span class="g sys"><b>G</b></span> в системном вызове</span>
+    <span><span class="g dead"><b>G</b></span> завершена</span>
+    <span><span class="m">M</span> поток ОС</span>
+    <span><span class="g ready hl"><b>G</b></span> изменилось на этом шаге</span>
+  </div>
+
+  <div class="grid">
+    <section class="board" aria-label="Состояние планировщика">
+      <div class="lane glob"><span class="lbl">Глобальная очередь (одна на программу)</span><div class="chips" id="glob"></div></div>
+      <div class="ps" id="ps"></div>
+      <div class="zones">
+        <div class="zone"><span class="lbl">Системный вызов: M застрял в ОС</span><div class="chips" id="sys"></div></div>
+        <div class="zone"><span class="lbl">Ждут события (не в очередях)</span><div class="chips" id="wait"></div></div>
+        <div class="zone"><span class="lbl">Спящие M (без P)</span><div class="chips" id="idle"></div></div>
+        <div class="zone"><span class="lbl">Завершены → список gFree</span><div class="chips" id="dead"></div></div>
+      </div>
+    </section>
+
+    <div class="side">
+      <div class="controls">
+        <button id="prev" type="button">← Назад</button>
+        <button id="next" type="button" class="primary">Дальше →</button>
+        <button id="play" type="button">Авто</button>
+        <span class="count" id="count"></span>
+      </div>
+      <div class="dots" id="dots"></div>
+      <article class="text" id="text" aria-live="polite"></article>
+      <div class="code"><pre id="code"></pre></div>
+    </div>
+  </div>
+
+  <section class="gloss">
+    <h2>Словарь</h2>
+    <dl>
+      <dt>G</dt><dd>горутина: стек плюс сохранённые регистры. Исполняется, ждёт в очереди или ждёт события.</dd>
+      <dt>M</dt><dd>поток ОС. Исполняет Go-код, только пока держит P.</dd>
+      <dt>P</dt><dd>право исполнять Go-код плюс локальная очередь G (до 256 штук), <code>runnext</code>, кэш памяти и таймеры. Число P равно <code>GOMAXPROCS</code>.</dd>
+      <dt>runnext</dt><dd>одно место «следующая на очереди» внутри P. Его проверяют раньше локальной очереди.</dd>
+      <dt>глобальная очередь</dt><dd>общая очередь на всю программу. Туда попадают G, которым не нашлось P. Каждый P заглядывает в неё, когда его локальная очередь пуста, а также на каждом 61-м запуске горутины, чтобы G там не застревали.</dd>
+      <dt>sysmon</dt><dd>фоновый поток рантайма, работает без P. Отбирает P у потоков, застрявших в системных вызовах, и вытесняет горутины, которые работают дольше 10 мс.</dd>
+      <dt>spinning</dt><dd>состояние M, у которого есть P, но нет работы: поток недолго ищет G, прежде чем заснуть.</dd>
+    </dl>
+    <p class="note">Это один из возможных порядков событий. В реальном запуске порядок зависит от времени и может отличаться, но правила перемещения G и M те же. Имена функций в каждом шаге взяты из <code>src/runtime/proc.go</code>.</p>
+  </section>
+</div>
+
+<script>
+const NAMES = { G1: 'main', G2: 'reader', G3: 'cpuHeavy', G4: 'other', G5: 'sender' };
+const CODE = [
+  'func main() {                    // G1',
+  '    var wg sync.WaitGroup',
+  '    ch := make(chan int)',
+  '    wg.Add(4)',
+  '    go reader(&wg)               // G2',
+  '    go cpuHeavy(&wg)             // G3',
+  '    go other(&wg)                // G4',
+  '    go sender(ch, &wg)           // G5',
+  '    v := <-ch',
+  '    fmt.Println(v)',
+  '    wg.Wait()',
+  '}',
+  '',
+  'func reader(wg *sync.WaitGroup) {',
+  '    defer wg.Done()',
+  '    os.ReadFile("big.log")       // системный вызов',
+  '}',
+  '',
+  'func cpuHeavy(wg *sync.WaitGroup) {',
+  '    defer wg.Done()',
+  '    for i := 0; i < 1e9; i++ {}  // долго считает',
+  '}',
+  '',
+  'func sender(ch chan int, wg *sync.WaitGroup) {',
+  '    defer wg.Done()',
+  '    ch <- 42',
+  '}',
+  '',
+  'func other(wg *sync.WaitGroup) { defer wg.Done() /* обычная работа */ }',
+];
+
+const P = (m, cur, next, q, spin) => ({ m, cur, next, q: q || [], spin });
+const STEPS = [
+  { t: 'Старт программы', lines: [0], fn: ['runtime.main'], hl: ['G1', 'M1'],
+    p: [P('M1', 'G1'), P(null)], glob: [], sys: [], wait: [], idle: [], dead: [],
+    b: `<p>Функция <code>main</code> — это тоже горутина, <b>G1</b>. <code>GOMAXPROCS = 2</code>, поэтому P ровно два.</p>
+        <p>P0 держит поток M1, и M1 исполняет G1. У P1 работы нет, поэтому поток для него не заводили, и P1 простаивает.</p>` },
+  { t: 'Четыре раза go', lines: [4, 5, 6, 7], fn: ['newproc', 'runqput', 'wakep'], hl: ['G2', 'G3', 'G4', 'G5', 'M2'],
+    p: [P('M1', 'G1', 'G5', ['G2', 'G3', 'G4']), P('M2', null, null, [], true)], glob: [], sys: [], wait: [], idle: [], dead: [],
+    b: `<p>Каждый <code>go</code> создаёт новую G и кладёт её в <b>runnext</b> текущего P. Это P0, потому что код исполняет G1, а G1 сейчас на P0. Прежняя G из runnext сдвигается в конец локальной очереди. Поэтому в runnext оказалась последняя созданная G5, а в очереди лежат G2, G3, G4.</p>
+        <p>Рантайм видит, что P1 простаивает, и запускает для него поток <b>M2</b>. Очередь P1 пока пуста, и M2 ищет работу (состояние spinning).</p>` },
+  { t: 'Кража работы', lines: [], fn: ['findRunnable', 'runqsteal'], hl: ['G2', 'G3'],
+    p: [P('M1', 'G1', 'G5', ['G4']), P('M2', 'G2', null, ['G3'])], glob: [], sys: [], wait: [], idle: [], dead: [],
+    b: `<p>M2 проверяет очередь своего P1: пусто. Затем глобальную очередь: тоже пусто. Тогда он <b>забирает половину</b> локальной очереди у P0: из трёх G уходят две, G2 и G3.</p>
+        <p>Теперь заняты оба P. G1 и G2 исполняются одновременно на двух ядрах.</p>` },
+  { t: 'G1 ждёт канал', lines: [8], fn: ['chanrecv', 'gopark', 'schedule'], hl: ['G1', 'G5'],
+    p: [P('M1', 'G5', null, ['G4']), P('M2', 'G2', null, ['G3'])], glob: [], sys: [], wait: [['G1', '<-ch']], idle: [], dead: [],
+    b: `<p>G1 дошла до <code>v := &lt;-ch</code>, а в канал ещё никто не писал. G1 снимается с потока и переходит в ожидание. Она <b>не лежит ни в одной очереди P</b>: её запомнил сам канал.</p>
+        <p>M1 свободен и выбирает следующую G. Сначала проверяется runnext, поэтому следующей идёт G5.</p>` },
+  { t: 'Блокирующий системный вызов', lines: [15], fn: ['entersyscall', 'retake', 'handoffp'], hl: ['M2', 'G2', 'M3', 'G3'],
+    p: [P('M1', 'G5', null, ['G4']), P('M3', 'G3')], glob: [], sys: [['M2', 'G2']], wait: [['G1', '<-ch']], idle: [], dead: [],
+    b: `<p>G2 вызвала <code>os.ReadFile</code>. Поток M2 уходит в ядро ОС и ждёт там вместе с G2. Без вмешательства P1 стоял бы всё это время, хотя в его очереди есть готовая G3.</p>
+        <p>Фоновый поток рантайма <b>sysmon</b> замечает это, забирает P1 у M2 и отдаёт новому потоку <b>M3</b>. M3 берёт из очереди G3. Потоков M теперь три, а P по-прежнему два: одновременно Go-код исполняют только два потока.</p>` },
+  { t: 'Отправка в канал будит G1', lines: [25], fn: ['chansend', 'goready', 'runqput'], hl: ['G1'],
+    p: [P('M1', 'G5', 'G1', ['G4']), P('M3', 'G3')], glob: [], sys: [['M2', 'G2']], wait: [], idle: [], dead: [],
+    b: `<p>G5 выполнила <code>ch &lt;- 42</code>. G1 уже ждала на этом канале, поэтому значение передаётся ей напрямую, а G1 становится готовой.</p>
+        <p>G1 кладут в runnext того P, на котором работает G5, то есть P0. Ждущих событий больше нет.</p>` },
+  { t: 'G5 завершилась', lines: [26, 9], fn: ['goexit0', 'gfput', 'schedule'], hl: ['G5', 'G1'],
+    p: [P('M1', 'G1', null, ['G4']), P('M3', 'G3')], glob: [], sys: [['M2', 'G2']], wait: [], idle: [], dead: ['G5'],
+    b: `<p>Функция <code>sender</code> вернулась, G5 закончилась. Структуру <code>g</code> не выбрасывают: она попадает в список свободных G (<b>gFree</b>) и пригодится для следующего <code>go</code>.</p>
+        <p>M1 берёт G1 из runnext. G1 продолжает с того места, где остановилась: со своего стека и сохранённых регистров. Дальше она печатает <code>v</code>.</p>` },
+  { t: 'Системный вызов вернулся', lines: [15], fn: ['exitsyscall', 'globrunqput', 'stopm'], hl: ['G2', 'M2'],
+    p: [P('M1', 'G1', null, ['G4']), P('M3', 'G3')], glob: ['G2'], sys: [], wait: [], idle: ['M2'], dead: ['G5'],
+    b: `<p>Файл прочитан, M2 вернулся из ОС вместе с G2. Чтобы снова исполнять Go-код, M2 нужен P. Свой прежний P1 он забрать не может: его держит M3. Других свободных P тоже нет.</p>
+        <p>Поэтому G2 уходит в <b>глобальную очередь</b>, а M2 засыпает в списке свободных потоков. Поток жив, но работы у него нет.</p>` },
+  { t: 'Вытеснение долгой горутины', lines: [20], fn: ['retake', 'preemptone', 'globrunqgetbatch'], hl: ['G3', 'G2'],
+    p: [P('M1', 'G1', null, ['G4']), P('M3', 'G2', null, ['G3'])], glob: [], sys: [], wait: [], idle: ['M2'], dead: ['G5'],
+    b: `<p>G3 считает в цикле дольше 10 мс подряд. sysmon прерывает её сигналом ОС (асинхронное вытеснение, работает с Go 1.14). Вытесненная G3 уходит в конец глобальной очереди, и там оказываются G2 и G3.</p>
+        <p>Локальная очередь P1 пуста, поэтому M3 берёт из глобальной очереди сразу пачку: G2 запускает, а G3 кладёт к себе в локальную очередь.</p>
+        <p>Обратите внимание: <b>G2 начинала на M2, а продолжает на M3</b>. Для горутины это незаметно.</p>` },
+  { t: 'Снова ожидание', lines: [10, 16], fn: ['gopark', 'goexit0', 'schedule'], hl: ['G1', 'G4', 'G2', 'G3'],
+    p: [P('M1', 'G4'), P('M3', 'G3')], glob: [], sys: [], wait: [['G1', 'wg.Wait()']], idle: ['M2'], dead: ['G5', 'G2'],
+    b: `<p>G1 дошла до <code>wg.Wait()</code>. Остальные горутины ещё не закончили, и G1 снова уходит в ожидание. M1 берёт из очереди P0 горутину G4.</p>
+        <p>На P1 закончилась G2 и тоже отправилась в gFree. M3 берёт G3 из локальной очереди.</p>` },
+  { t: 'Финал', lines: [11], fn: ['goready', 'stopm'], hl: ['G1', 'M3', 'G3', 'G4'],
+    p: [P('M1', 'G1'), P(null)], glob: [], sys: [], wait: [], idle: ['M2', 'M3'], dead: ['G5', 'G2', 'G4', 'G3'],
+    b: `<p>G3 и G4 закончились. Последний <code>wg.Done()</code> будит G1, и она снова работает на P0.</p>
+        <p>Для P1 работы нет: M3 недолго ищет её, ничего не находит и засыпает. P1 простаивает, как на старте.</p>
+        <p>Когда <code>main</code> вернётся, программа завершится целиком. Это случилось бы, даже если бы какие-то горутины ещё работали.</p>` },
+];
+
+const $ = id => document.getElementById(id);
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const g = (id, st) => `<span class="g ${st}" data-k="${id}"><b>${id}</b><small>${NAMES[id]}</small></span>`;
+const m = id => `<span class="m" data-k="${id}">${id}</span>`;
+const empty = '<span class="empty">пусто</span>';
+const list = (arr, f) => arr.length ? arr.map(f).join('') : empty;
+
+$('code').innerHTML = CODE.map(l => `<span>${l.replace(/</g, '&lt;') || ' '}</span>`).join('');
+$('dots').innerHTML = STEPS.map((s, i) => `<button class="dot" type="button" data-i="${i}" aria-label="Шаг ${i + 1}: ${s.t}"></button>`).join('');
+
+let cur = 0, timer = null;
+
+function render(i) {
+  const first = {};
+  document.querySelectorAll('[data-k]').forEach(el => first[el.dataset.k] = el.getBoundingClientRect());
+  const s = STEPS[i];
+
+  $('glob').innerHTML = list(s.glob, x => g(x, 'ready'));
+  $('ps').innerHTML = s.p.map((p, n) => `
+    <div class="pcol">
+      <div class="p ${p.m ? '' : 'idle'}">
+        <h3>P${n}<small>${p.m ? 'занят' : 'простаивает'}</small></h3>
+        <div class="row"><span class="k">runnext</span><div class="chips">${p.next ? g(p.next, 'ready') : empty}</div></div>
+        <div class="row"><span class="k">очередь</span><div class="chips">${list(p.q, x => g(x, 'ready'))}</div></div>
+      </div>
+      <div class="link ${p.m ? '' : 'none'}"></div>
+      <div class="mrow">${p.m
+        ? `${m(p.m)}<span class="k">исполняет →</span>${p.cur ? g(p.cur, 'run') : `<span class="spin">${p.spin ? 'ищет работу…' : '—'}</span>`}`
+        : '<span class="spin">нет M</span>'}</div>
+    </div>`).join('');
+  $('sys').innerHTML = list(s.sys, ([mm, gg]) => `<span class="pair">${m(mm)}${g(gg, 'sys')}</span>`);
+  $('wait').innerHTML = list(s.wait, ([gg, why]) => `<span class="wpair">${g(gg, 'wait')}<span class="why">${why.replace(/</g, '&lt;')}</span></span>`);
+  $('idle').innerHTML = list(s.idle, m);
+  $('dead').innerHTML = list(s.dead, x => g(x, 'dead'));
+
+  $('text').innerHTML = `<h2><span>ШАГ ${i + 1} ИЗ ${STEPS.length}</span>${s.t}</h2>${s.b}
+    <div class="fns">Функции рантайма: ${s.fn.map(f => `<code>${f}</code>`).join(' ')}</div>`;
+  [...$('code').children].forEach((el, n) => el.classList.toggle('on', s.lines.includes(n)));
+  [...$('dots').children].forEach((el, n) => el.classList.toggle('on', n <= i));
+  $('count').textContent = `${i + 1} / ${STEPS.length}`;
+  $('prev').disabled = i === 0;
+  $('next').disabled = i === STEPS.length - 1;
+
+  document.querySelectorAll('[data-k]').forEach(el => {
+    const k = el.dataset.k;
+    if (s.hl.includes(k)) el.classList.add('hl');
+    if (reduce) return;
+    const f = first[k], l = el.getBoundingClientRect();
+    if (!f) { el.animate([{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'none' }], { duration: 350, easing: 'ease-out' }); return; }
+    const dx = f.left - l.left, dy = f.top - l.top;
+    if (dx || dy) el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 600, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  });
+}
+
+function go(i) { cur = Math.max(0, Math.min(STEPS.length - 1, i)); render(cur); }
+function stop() { clearInterval(timer); timer = null; $('play').textContent = 'Авто'; }
+
+$('prev').onclick = () => { stop(); go(cur - 1); };
+$('next').onclick = () => { stop(); go(cur + 1); };
+$('dots').onclick = e => { if (e.target.dataset.i) { stop(); go(+e.target.dataset.i); } };
+$('play').onclick = () => {
+  if (timer) return stop();
+  if (cur === STEPS.length - 1) go(0);
+  $('play').textContent = 'Пауза';
+  timer = setInterval(() => cur < STEPS.length - 1 ? go(cur + 1) : stop(), 4000);
+};
+addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') { stop(); go(cur + 1); }
+  if (e.key === 'ArrowLeft') { stop(); go(cur - 1); }
+});
+go(0);
+</script>
